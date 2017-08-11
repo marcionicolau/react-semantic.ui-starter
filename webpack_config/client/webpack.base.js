@@ -1,102 +1,86 @@
-'use strict'
-const path = require('path')
-const webpack = require('webpack')
-const config = require('../config')
+import path from 'path'
+import webpack from 'webpack'
+import config from '../config'
+import isomorphicWebpackConfig from '../webpack.isomorphic'
+import ManifestPlugin from 'webpack-manifest-plugin'
+import _ from 'lodash'
+//
+const {
+	GA_ID,
+	SENTRY_PUBLIC_DSN,
+	NODE_ENV,
+	APP_LANGUAGE,
+	srcPath,
+	distPath,
+	publicPath
+} = config
 
-const {BASE_API, NODE_ENV, GA_ID, SENTRY_PUBLIC_DSN} = process.env
-
-let definePluginArgs = {
-  'process.env.NODE_ENV': JSON.stringify(NODE_ENV),
-  'process.env.BASE_API': JSON.stringify(BASE_API || '/api/v1'),
-  'process.env.GA_ID': JSON.stringify(GA_ID),
-  'process.env.SENTRY_PUBLIC_DSN': JSON.stringify(SENTRY_PUBLIC_DSN),
-  'process.env.BROWSER': JSON.stringify(true)
+const definePluginArgs = {
+	'process.env.GA_ID': JSON.stringify(GA_ID),
+	'process.env.SENTRY_PUBLIC_DSN': JSON.stringify(SENTRY_PUBLIC_DSN),
+	'process.env.BROWSER': JSON.stringify(true)
 }
 
-if (process.env.NODE_ENV === 'development') {
-  // ignore i18n plugin in development
-  definePluginArgs['i18n'] = str => {
-    return str
-  }
+const baseBuild = {
+	entry: {
+		client: path.join(srcPath, './client')
+	},
+	output: {
+		path: path.join(distPath, './client', APP_LANGUAGE),
+		filename: '[name].js',
+		chunkFilename: '[name].[chunkhash:6].js',
+		publicPath
+	},
+	performance: {
+		hints: NODE_ENV === 'production' ? 'warning' : false
+	},
+	resolve: {
+		alias: isomorphicWebpackConfig.resolve.alias,
+		modules: isomorphicWebpackConfig.resolve.modules,
+		extensions: isomorphicWebpackConfig.resolve.extensions.concat(['.css', '.scss', '.sass'])
+	},
+	module: {
+		rules: isomorphicWebpackConfig.module.rules.concat([
+			{
+				test: /\.(ico|eot|otf|webp|ttf|woff|woff2)$/i,
+				use: `file-loader?limit=100000&name=assets/[name].[hash:8].[ext]`
+			},
+			{
+				test: /\.(jpe?g|png|gif|svg)$/,
+				use: [
+					{
+						loader: 'url-loader',
+						options: {
+							limit: 8192,
+							// path: '/images',
+							name: 'images/[name].[hash:8].[ext]'
+						}
+					},
+					'img-loader'
+				]
+			}
+			// NOTE: LQIP loader doesn't work with file-loader and url-loader :(
+			// `npm i --save-dev lqip-loader`
+			// {
+			//   test: /\.(jpe?g|png)$/i,
+			//   enforce: 'pre',
+			//   loaders: [
+			//     {
+			//       loader: 'lqip-loader',
+			//       options: {
+			//         path: '/images-lqip', // your image going to be in media folder in the output dir
+			//         name: '[name]-lqip.[hash:8].[ext]' // you can use [hash].[ext] too if you wish
+			//       }
+			//     }
+			//   ]
+			// }
+		])
+	},
+	plugins: isomorphicWebpackConfig.plugins.concat([
+		new webpack.DefinePlugin(definePluginArgs),
+		new ManifestPlugin({fileName: 'manifest.json', cache: config.manifest})
+	]),
+	target: 'web'
 }
 
-module.exports = {
-  entry: {
-    client: path.join(config.srcPath, './client')
-  },
-  output: {
-    path: path.join(config.distPath, './client'),
-    filename: '[name].js',
-    chunkFilename: '[name].[chunkhash:6].js',
-    publicPath: config.publicPath
-  },
-  performance: {
-    hints: process.env.NODE_ENV === 'production' ? 'warning' : false
-  },
-  resolve: {
-    extensions: ['.js', '.jsx', '.css', '.json', '.scss'],
-    alias: config.alias,
-    modules: [
-      // places where to search for required modules
-      config.srcPath,
-      `${config.rootPath}/node_modules`
-    ]
-  },
-  module: {
-    rules: [
-      {
-        test: /\.(js|jsx)$/,
-        enforce: 'pre',
-        use: [
-          {
-            loader: 'eslint-loader',
-            options: {
-              fix: true
-            }
-          }
-        ],
-        exclude: [/node_modules/]
-      },
-      {
-        test: /\.(js|jsx)$/,
-        use: 'babel-loader',
-        exclude: [/node_modules/]
-      },
-      {
-        test: /\.(ico|eot|otf|webp|ttf|woff|woff2)$/i,
-        use: `file-loader?limit=100000&name=assets/[name].[hash:8].[ext]`
-      },
-      {
-        test: /\.(jpe?g|png|gif|svg)$/,
-        use: [
-          {
-            loader: 'url-loader',
-            options: {
-              limit: 8192,
-              // path: '/images',
-              name: 'images/[name].[hash:8].[ext]'
-            }
-          },
-          'img-loader'
-        ]
-      }
-      // NOTE: LQIP loader doesn't work with file-loader and url-loader :(
-      // `npm i --save-dev lqip-loader`
-      // {
-      //   test: /\.(jpe?g|png)$/i,
-      //   enforce: 'pre',
-      //   loaders: [
-      //     {
-      //       loader: 'lqip-loader',
-      //       options: {
-      //         path: '/images-lqip', // your image going to be in media folder in the output dir
-      //         name: '[name]-lqip.[hash:8].[ext]' // you can use [hash].[ext] too if you wish
-      //       }
-      //     }
-      //   ]
-      // }
-    ]
-  },
-  plugins: [new webpack.DefinePlugin(definePluginArgs)],
-  target: 'web'
-}
+export default baseBuild
